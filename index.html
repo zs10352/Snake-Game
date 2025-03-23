@@ -37,6 +37,7 @@
       align-items: center;
       text-align: center;
       z-index: 10;
+      cursor: pointer;
     }
     #overlay.hidden {
       display: none;
@@ -59,7 +60,7 @@
       <p>Welcome to Snake!</p>
       <p>Use arrow keys to move.</p>
       <p>Press P to pause/resume.</p>
-      <p>Press any key to start.</p>
+      <p>Press any key or click/tap to start.</p>
     </div>
     <button id="restartBtn" class="hidden">Restart</button>
   </div>
@@ -78,12 +79,12 @@
     const gameOverSound = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YRAAAAD//w==');
 
     const gridSize = 20;
-    let snake, direction, food, score, gameSpeed, paused, running;
+    let snake, direction, food, score, paused, running;
     
     // For a smoother game loop with requestAnimationFrame
     let lastTime = 0;
     let accumulator = 0;
-    let interval = 100; // ms per update (this will decrease as score increases)
+    let interval = 100; // ms per update (will decrease as score increases)
 
     // Load high score from local storage
     let highScore = localStorage.getItem('snakeHighScore') || 0;
@@ -106,12 +107,10 @@
 
       // Check if food is eaten
       if (head.x === food.x && head.y === food.y) {
-        // Extend snake by duplicating last segment
         snake.push({ ...snake[snake.length - 1] });
         score++;
         scoreEl.textContent = score;
-        // Increase speed slightly (minimum update interval of 50ms)
-        interval = Math.max(50, 100 - score);
+        interval = Math.max(50, 100 - score); // increase speed
         eatSound.play();
         placeFood();
       } else {
@@ -133,7 +132,6 @@
     }
 
     function draw() {
-      // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       // Draw food
       ctx.fillStyle = 'red';
@@ -154,23 +152,20 @@
 
     function gameOver() {
       gameOverSound.play();
-      // Update high score if needed
       if (score > highScore) {
         highScore = score;
         localStorage.setItem('snakeHighScore', highScore);
         highScoreEl.textContent = highScore;
       }
-      // Show game over overlay
-      overlayText.innerHTML = `<p>Game Over</p><p>Score: ${score}</p><p>Press Restart or any key to play again.</p>`;
+      overlayText.innerHTML = `<p>Game Over</p><p>Score: ${score}</p><p>Press Restart or click/tap/any key to play again.</p>`;
       restartBtn.classList.remove('hidden');
       overlay.classList.remove('hidden');
       running = false;
     }
 
-    // The game loop using requestAnimationFrame
+    // Game loop using requestAnimationFrame with a fixed timestep
     function gameLoop(timestamp) {
-      if (!running) return; // Stop loop if game is over or not running
-
+      if (!running) return;
       if (!lastTime) lastTime = timestamp;
       let delta = timestamp - lastTime;
       lastTime = timestamp;
@@ -198,7 +193,6 @@
 
     // Keyboard controls
     window.addEventListener('keydown', (e) => {
-      // Only register direction if game is running
       if (running) {
         if (e.key === 'ArrowUp' && direction.y === 0) direction = { x: 0, y: -1 };
         if (e.key === 'ArrowDown' && direction.y === 0) direction = { x: 0, y: 1 };
@@ -206,7 +200,6 @@
         if (e.key === 'ArrowRight' && direction.x === 0) direction = { x: 1, y: 0 };
         if (e.key.toLowerCase() === 'p') paused = !paused;
       } else {
-        // If game isn't running (start screen or game over), any key starts the game
         startGame();
       }
     });
@@ -229,6 +222,11 @@
         if (deltaY > 0 && direction.y === 0) direction = { x: 0, y: 1 };
         else if (deltaY < 0 && direction.y === 0) direction = { x: 0, y: -1 };
       }
+    });
+
+    // Allow clicking/tapping on the overlay to start the game
+    overlay.addEventListener('click', () => {
+      if (!running) startGame();
     });
 
     // Restart button click handler
