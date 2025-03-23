@@ -3,26 +3,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Enhanced Snake Game</title>
+  <title>Google Style Snake Game</title>
   <style>
     body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f1f1f1;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       height: 100vh;
-      background-color: #222;
-      margin: 0;
-      color: #fff;
-      font-family: Arial, sans-serif;
+      position: relative;
+      color: #333;
     }
     #scoreBoard {
       margin-bottom: 10px;
       font-size: 1.2em;
     }
     canvas {
-      border: 2px solid white;
-      background-color: black;
+      border: 2px solid #333;
+      background-color: #fff;
     }
     #overlay {
       position: absolute;
@@ -30,17 +31,14 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(241, 241, 241, 0.95);
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      text-align: center;
+      color: #333;
+      font-size: 2em;
       z-index: 10;
-      cursor: pointer;
-    }
-    #overlay.hidden {
-      display: none;
     }
     #overlay button {
       margin-top: 20px;
@@ -56,161 +54,196 @@
   </div>
   <canvas id="gameCanvas" width="400" height="400"></canvas>
   <div id="overlay">
-    <div id="overlayText">
-      <p>Welcome to Snake!</p>
-      <p>Use arrow keys to move.</p>
-      <p>Press P to pause/resume.</p>
-      <p>Press any key or click/tap to start.</p>
-    </div>
-    <button id="restartBtn" class="hidden">Restart</button>
+    <div id="message">Press any arrow key to start</div>
+    <button id="restartBtn" style="display:none;">Restart</button>
   </div>
-
   <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreEl = document.getElementById('score');
     const highScoreEl = document.getElementById('highScore');
     const overlay = document.getElementById('overlay');
-    const overlayText = document.getElementById('overlayText');
+    const messageEl = document.getElementById('message');
     const restartBtn = document.getElementById('restartBtn');
 
-    // Sound effects (using a small inline beep sound)
+    // Sound effects (demo sounds)
     const eatSound = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YRAAAAD//w==');
     const gameOverSound = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YRAAAAD//w==');
 
     const gridSize = 20;
-    let snake, direction, food, score, paused, running;
-    
-    // For a smoother game loop with requestAnimationFrame
+    let snake = [{ x: 10, y: 10 }];
+    let direction = { x: 0, y: 0 };
+    let food = { x: 5, y: 5 };
+    let score = 0;
+    let gameSpeed = 100; // delay in ms
     let lastTime = 0;
-    let accumulator = 0;
-    let interval = 100; // ms per update (will decrease as score increases)
+    let paused = false;
+    let started = false;
+    let touchStartX = 0;
+    let touchStartY = 0;
 
     // Load high score from local storage
-    let highScore = localStorage.getItem('snakeHighScore') || 0;
+    let highScore = Number(localStorage.getItem('snakeHighScore')) || 0;
     highScoreEl.textContent = highScore;
 
-    // Initialize or reset game state
-    function resetGame() {
-      snake = [{ x: 10, y: 10 }];
-      direction = { x: 0, y: 0 };
-      score = 0;
-      interval = 100;
-      paused = false;
-      scoreEl.textContent = score;
-      placeFood();
-    }
+    // Place food ensuring it doesn't appear on the snake
+    const placeFood = () => {
+      do {
+        food = {
+          x: Math.floor(Math.random() * (canvas.width / gridSize)),
+          y: Math.floor(Math.random() * (canvas.height / gridSize))
+        };
+      } while (snake.some(segment => segment.x === food.x && segment.y === food.y));
+    };
 
-    function update() {
-      // Compute new head position
+    // Check collision with snake body (excluding head)
+    const checkCollision = head =>
+      snake.slice(1).some(segment => segment.x === head.x && segment.y === head.y);
+
+    // Update game state
+    const update = () => {
       const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
-
-      // Check if food is eaten
-      if (head.x === food.x && head.y === food.y) {
-        snake.push({ ...snake[snake.length - 1] });
-        score++;
-        scoreEl.textContent = score;
-        interval = Math.max(50, 100 - score); // increase speed
-        eatSound.play();
-        placeFood();
-      } else {
-        snake.pop();
-      }
 
       // Check collisions with walls or self
       if (
-        head.x < 0 ||
-        head.x >= canvas.width / gridSize ||
-        head.y < 0 ||
-        head.y >= canvas.height / gridSize ||
-        snake.some((segment, index) => index !== 0 && segment.x === head.x && segment.y === head.y)
+        head.x < 0 || head.x >= canvas.width / gridSize ||
+        head.y < 0 || head.y >= canvas.height / gridSize ||
+        checkCollision(head)
       ) {
         gameOver();
         return;
       }
       snake.unshift(head);
-    }
 
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      // Draw food
+      // Check if food is eaten
+      if (head.x === food.x && head.y === food.y) {
+        score++;
+        scoreEl.textContent = score;
+        gameSpeed = Math.max(50, 100 - score);
+        eatSound.play();
+        placeFood();
+      } else {
+        snake.pop();
+      }
+    };
+
+    // Draw a subtle grid on the canvas (optional)
+    const drawGrid = () => {
+      ctx.strokeStyle = '#eee';
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+    };
+
+    // Draw game elements with a minimalist style
+    const draw = () => {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw grid lines
+      drawGrid();
+
+      // Draw food as a simple red circle
       ctx.fillStyle = 'red';
-      ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize, gridSize);
-      // Draw snake
-      ctx.fillStyle = 'lime';
+      ctx.beginPath();
+      ctx.arc(food.x * gridSize + gridSize / 2, food.y * gridSize + gridSize / 2, gridSize / 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      // Simple stem for the apple
+      ctx.fillStyle = 'green';
+      ctx.fillRect(food.x * gridSize + gridSize / 2 - 2, food.y * gridSize + gridSize / 2 - 8, 4, 6);
+
+      // Draw snake segments as flat squares with a slight gap
+      ctx.fillStyle = '#0f0';
       snake.forEach(segment => {
-        ctx.fillRect(segment.x * gridSize, segment.y * gridSize, gridSize, gridSize);
+        ctx.fillRect(segment.x * gridSize + 1, segment.y * gridSize + 1, gridSize - 2, gridSize - 2);
       });
-    }
+    };
 
-    function placeFood() {
-      food = {
-        x: Math.floor(Math.random() * (canvas.width / gridSize)),
-        y: Math.floor(Math.random() * (canvas.height / gridSize))
-      };
-    }
+    // Main game loop using requestAnimationFrame
+    const gameLoop = (timestamp) => {
+      if (paused || !started) {
+        lastTime = timestamp;
+        requestAnimationFrame(gameLoop);
+        return;
+      }
+      if (timestamp - lastTime > gameSpeed) {
+        update();
+        draw();
+        lastTime = timestamp;
+      }
+      requestAnimationFrame(gameLoop);
+    };
 
-    function gameOver() {
+    // Handle game over: play sound, update high score, and show overlay
+    const gameOver = () => {
       gameOverSound.play();
       if (score > highScore) {
         highScore = score;
         localStorage.setItem('snakeHighScore', highScore);
         highScoreEl.textContent = highScore;
       }
-      overlayText.innerHTML = `<p>Game Over</p><p>Score: ${score}</p><p>Press Restart or click/tap/any key to play again.</p>`;
-      restartBtn.classList.remove('hidden');
-      overlay.classList.remove('hidden');
-      running = false;
-    }
+      overlay.style.visibility = 'visible';
+      messageEl.textContent = 'Game Over';
+      restartBtn.style.display = 'block';
+    };
 
-    // Game loop using requestAnimationFrame with a fixed timestep
-    function gameLoop(timestamp) {
-      if (!running) return;
-      if (!lastTime) lastTime = timestamp;
-      let delta = timestamp - lastTime;
-      lastTime = timestamp;
-      if (!paused) {
-        accumulator += delta;
-        while (accumulator >= interval) {
-          update();
-          accumulator -= interval;
-        }
-      }
+    // Reset game state for restart
+    const resetGame = () => {
+      snake = [{ x: 10, y: 10 }];
+      direction = { x: 0, y: 0 };
+      score = 0;
+      gameSpeed = 100;
+      scoreEl.textContent = score;
+      overlay.style.visibility = 'visible';
+      messageEl.textContent = 'Press any arrow key to start';
+      restartBtn.style.display = 'none';
+      started = false;
+      placeFood();
       draw();
-      requestAnimationFrame(gameLoop);
-    }
+    };
 
-    // Start the game (or restart)
-    function startGame() {
-      resetGame();
-      overlay.classList.add('hidden');
-      restartBtn.classList.add('hidden');
-      running = true;
-      lastTime = 0;
-      accumulator = 0;
-      requestAnimationFrame(gameLoop);
-    }
-
-    // Keyboard controls
+    // Start game on key press if not started already
     window.addEventListener('keydown', (e) => {
-      if (running) {
-        if (e.key === 'ArrowUp' && direction.y === 0) direction = { x: 0, y: -1 };
-        if (e.key === 'ArrowDown' && direction.y === 0) direction = { x: 0, y: 1 };
-        if (e.key === 'ArrowLeft' && direction.x === 0) direction = { x: -1, y: 0 };
-        if (e.key === 'ArrowRight' && direction.x === 0) direction = { x: 1, y: 0 };
-        if (e.key.toLowerCase() === 'p') paused = !paused;
-      } else {
-        startGame();
+      if (!started) {
+        started = true;
+        overlay.style.visibility = 'hidden';
+      }
+      switch (e.key) {
+        case 'ArrowUp':
+          if (direction.y === 0) direction = { x: 0, y: -1 };
+          break;
+        case 'ArrowDown':
+          if (direction.y === 0) direction = { x: 0, y: 1 };
+          break;
+        case 'ArrowLeft':
+          if (direction.x === 0) direction = { x: -1, y: 0 };
+          break;
+        case 'ArrowRight':
+          if (direction.x === 0) direction = { x: 1, y: 0 };
+          break;
+        case 'p':
+        case 'P':
+          paused = !paused;
+          break;
       }
     });
 
     // Mobile touch controls (swipe detection)
-    let touchStartX = 0, touchStartY = 0;
     canvas.addEventListener('touchstart', (e) => {
       const touch = e.touches[0];
       touchStartX = touch.clientX;
       touchStartY = touch.clientY;
     });
+
     canvas.addEventListener('touchend', (e) => {
       const touch = e.changedTouches[0];
       const deltaX = touch.clientX - touchStartX;
@@ -224,16 +257,13 @@
       }
     });
 
-    // Allow clicking/tapping on the overlay to start the game
-    overlay.addEventListener('click', () => {
-      if (!running) startGame();
-    });
+    // Restart button event listener
+    restartBtn.addEventListener('click', resetGame);
 
-    // Restart button click handler
-    restartBtn.addEventListener('click', startGame);
-
-    // Display the start overlay on load
-    overlay.classList.remove('hidden');
+    // Initialize game and start loop
+    placeFood();
+    draw();
+    requestAnimationFrame(gameLoop);
   </script>
 </body>
 </html>
